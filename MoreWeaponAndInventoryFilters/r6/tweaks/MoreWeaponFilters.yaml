@@ -1,0 +1,39 @@
+# Icon for "Iconic" filter
+UIIcon.Filter_Iconic:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: hacking
+
+# Icon for "CraftingPart" filter
+UIIcon.Filter_CraftingPart:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: mod
+
+# Icon for "CraftingRecipe" filter
+UIIcon.Filter_CraftingRecipe:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: Techie
+
+# Icon for "Uncategorized" filter
+UIIcon.Filter_Uncategorized:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: resource_single
+
+UIIcon.Filter_Handgun:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: ammo_handgun
+
+UIIcon.Filter_Automatic:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: ammo_rifle
+
+UIIcon.Filter_LongRange:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: ammo_sniper
+
+UIIcon.Filter_Shotgun:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: ammo_shotgun
+
+UIIcon.Filter_OtherRanged:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: minor_activity

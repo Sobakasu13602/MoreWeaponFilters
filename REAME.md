@@ -1,0 +1,1 @@
+Mod for Cyberpunk 2077 that adds additional weapon filter buttons, and optionally some other item filters.
