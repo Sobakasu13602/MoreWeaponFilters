@@ -151,3 +151,64 @@ protected cb func OnItemChooserUnequipItem(evt: ref<ItemChooserUnequipItem>) -> 
 	}
 	return result;
 }
+
+// Increase scale of melee filter icons
+
+@wrapMethod(BackpackFilterButtonController)
+public final func Setup(filterType: ItemFilterCategory) -> Void {
+	if EnumInt(filterType) >= EnumInt(ItemFilterCategory2.Thrown) && EnumInt(filterType) <= EnumInt(ItemFilterCategory2.Blunt) {
+		inkWidgetRef.SetScale(this.m_icon, new Vector2(2.3, 2.3));
+	} else {
+		inkWidgetRef.SetScale(this.m_icon, new Vector2(1, 1));
+	}
+	wrappedMethod(filterType);
+
+}
+
+@addField(FilterRadioGroup)
+public let modScaleMelee: Bool = false;
+
+@wrapMethod(FullscreenVendorGameController)
+private final func SetFilters(root: inkWidgetRef, const data: script_ref<[Int32]>, callback: CName) -> Void {
+	let radioGroup: ref<FilterRadioGroup> = inkWidgetRef.GetControllerByType(root, n"FilterRadioGroup") as FilterRadioGroup;
+	radioGroup.modScaleMelee = true;
+	wrappedMethod(root, data, callback);
+}
+
+@wrapMethod(FilterRadioGroup)
+public final func SetData(const data: script_ref<[Int32]>, opt tooltipsManager: wref<gameuiTooltipsManager>, opt tooltipIndex: Int32) -> Void {
+	wrappedMethod(data, tooltipsManager, tooltipIndex);
+	let filterToggle: ref<ToggleController>;
+	let i: Int32 = 0;
+	while i < ArraySize(Deref(data)) {
+		filterToggle = this.m_toggles[i] as ToggleController;
+		if this.modScaleMelee && Deref(data)[i] >= EnumInt(ItemFilterCategory2.Thrown) && Deref(data)[i] <= EnumInt(ItemFilterCategory2.Blunt) {
+			filterToggle.SetMeleeScale();
+		} else if this.modScaleMelee {
+			filterToggle.SetOrigScale();
+		}
+		i += 1;
+	};
+}
+
+@addField(ToggleController)
+private let modOriginalScaleSet: Bool = false;
+
+@addField(ToggleController)
+private let modOriginalScale: Vector2;
+
+@addMethod(ToggleController)
+public final func SetMeleeScale() -> Void {
+	if !this.modOriginalScaleSet {
+		this.modOriginalScale = inkWidgetRef.GetScale(this.m_icon);
+		this.modOriginalScaleSet = true;
+	}
+	inkWidgetRef.SetScale(this.m_icon, new Vector2(2.3, 2.3));
+}
+
+@addMethod(ToggleController)
+public final func SetOrigScale() -> Void {
+	if this.modOriginalScaleSet {
+		inkWidgetRef.SetScale(this.m_icon, this.modOriginalScale);
+	}
+}

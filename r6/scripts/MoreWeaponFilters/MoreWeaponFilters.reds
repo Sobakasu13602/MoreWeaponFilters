@@ -23,7 +23,17 @@ enum ItemFilterCategory2 {
 	LongRange = 22,
 	Shotgun = 23,
 	OtherRanged = 24,
-	AllCount = 25,
+
+	Thrown = 25,
+	Blade = 26,
+	Blunt = 27,
+	OtherMelee = 28,
+
+	Iconic = 29,			// Iconic items
+	CraftingPart = 30,		// Crafting and quickhack components
+	CraftingRecipe = 31,	// Crafting and quickhack recepies (These don't actually appear in your backpack)
+	Uncategorized = 32,		// Anything else
+	AllCount = 33,
 }
 
 // Refactor PopulateInventory, change local tagsToFilterOut variable into m_tagsToFilterOut field.
@@ -37,11 +47,28 @@ private let m_additionalFilters: array<ItemFilterCategory2>;
 // Set inventory blacklist (quickhacks are no longer on it), and additional filters
 @wrapMethod(BackpackMainGameController)
 protected cb func OnInitialize() -> Bool {
+	let moreWeaponFiltersConfig = MoreWeaponFiltersConfig.Get(GetGameInstance());
+
 	ArrayPush(this.m_tagsToFilterOut, n"HideInBackpackUI");
-	ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Handgun);
-	ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Automatic);
-	ArrayPush(this.m_additionalFilters, ItemFilterCategory2.LongRange);
-	ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Shotgun);
+
+	if moreWeaponFiltersConfig.enableRangedBackpackFilters {
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Handgun);
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Automatic);
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.LongRange);
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Shotgun);
+	}
+
+	if moreWeaponFiltersConfig.enableMeleeBackpackFilters {
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Thrown);
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Blade);
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Blunt);
+	}
+
+	if moreWeaponFiltersConfig.enableItemBackpackFilters {
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Iconic);
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Quest);
+		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Uncategorized);
+	}
 	return wrappedMethod();
 }
 
@@ -148,6 +175,42 @@ public final func SortFiltersList() -> Void {
 	}
 }
 
+// Fix bug where item filters don't show up when you have a single item of a given type.
+// In vanilla, the `m_filtersToCheck` loop returns after the first match, which means the
+// vanilla ranged weapons/melee weapons filters matches first and it exits. But since it
+// removed the vanilla filter from m_filtersToCheck, a second item of that type will
+// cause the filter to appear. There also appeared to be an incrementing bug, where it
+// would increment after erasing from the same array. I think that means it would be
+// skipping the next filter every time it had a match, so this changes it to only
+// increment when there isn't an ArrayErase.
+@replaceMethod(ItemCategoryFliterManager)
+public final func AddItem(itemData: wref<gameItemData>) -> Void {
+	let i: Int32 = 0;
+	while i < ArraySize(this.m_sharedFiltersToCheck) {
+		if ItemCategoryFliter.IsOfCategoryType(this.m_sharedFiltersToCheck[i], itemData) {
+			if !ArrayContains(this.m_filters, this.m_sharedFiltersToCheck[i]) {
+				ArrayPush(this.m_filters, this.m_sharedFiltersToCheck[i]);
+			};
+			ArrayErase(this.m_sharedFiltersToCheck, i);
+			this.m_isOrderDirty = true;
+		} else {
+			i += 1;
+		};
+	};
+	i = 0;
+	while i < ArraySize(this.m_filtersToCheck) {
+		if ItemCategoryFliter.IsOfCategoryType(this.m_filtersToCheck[i], itemData) {
+			if !ArrayContains(this.m_filters, this.m_filtersToCheck[i]) {
+				ArrayPush(this.m_filters, this.m_filtersToCheck[i]);
+			};
+			ArrayErase(this.m_filtersToCheck, i);
+			this.m_isOrderDirty = true;
+		} else {
+			i += 1;
+		};
+	};
+}
+
 // Add HasTag method to UIInventoryItem
 @addMethod(UIInventoryItem)
 public final func HasTag(tag: CName) -> Bool {
@@ -168,6 +231,25 @@ public final static func FilterItem(filter: ItemFilterCategory, wrappedData: ref
 				return (wrappedData.Item.HasTag(n"Rifle Precision") || wrappedData.Item.HasTag(n"Rifle Sniper")) && !wrappedData.Item.HasTag(n"ShotgunWeapon");
 			case ItemFilterCategory2.Shotgun:
 				return wrappedData.Item.HasTag(n"Shotgun") || wrappedData.Item.HasTag(n"Shotgun Dual") || wrappedData.Item.HasTag(n"ShotgunWeapon");
+
+			case ItemFilterCategory2.Thrown:
+				return wrappedData.Item.HasTag(n"ThrowableWeapon");
+			case ItemFilterCategory2.Blade:
+				return wrappedData.Item.HasTag(n"BladeWeapon");
+			case ItemFilterCategory2.Blunt:
+				return wrappedData.Item.HasTag(n"BluntWeapon");
+
+			case ItemFilterCategory2.Iconic:
+				return wrappedData.Item.IsIconic();
+			case ItemFilterCategory2.CraftingPart:
+				return wrappedData.Item.HasTag(n"CraftingPart");
+			case ItemFilterCategory2.CraftingRecipe:
+				return wrappedData.Item.IsRecipe();
+			case ItemFilterCategory2.Uncategorized:
+				return Equals(wrappedData.Item.GetFilterCategory(), ItemFilterCategory.Invalid)
+					&& !wrappedData.Item.IsQuestItem()
+					&& !wrappedData.Item.HasTag(n"CraftingPart")
+					&& !wrappedData.Item.IsRecipe();
 		}
 	}
 	// Basic filter categories
@@ -189,6 +271,22 @@ public final static func GetLabelKey(filterType: ItemFilterCategory) -> CName {
 			return n"Shotgun";
 		case ItemFilterCategory2.OtherRanged:
 			return n"Other Ranged";
+
+		case ItemFilterCategory2.Thrown:
+			return n"Thrown";
+		case ItemFilterCategory2.Blade:
+			return n"Blade";
+		case ItemFilterCategory2.Blunt:
+			return n"Blunt";
+
+		case ItemFilterCategory2.Iconic:
+			return n"Iconic Items";
+		case ItemFilterCategory2.CraftingPart:
+			return n"Crafting Materials";
+		case ItemFilterCategory2.CraftingRecipe:
+			return n"Crafting Specs";
+		case ItemFilterCategory2.Uncategorized:
+			return n"Others";
 	}
 	// Check base categories
 	return wrappedMethod(filterType);
@@ -209,6 +307,24 @@ public final static func GetIcon(filterType: ItemFilterCategory) -> String {
 			return "UIIcon.Filter_Shotgun";
 		case ItemFilterCategory2.OtherRanged:
 			return "UIIcon.Filter_OtherRanged";
+
+		case ItemFilterCategory2.Thrown:
+			return "UIIcon.Filter_Thrown";
+		case ItemFilterCategory2.Blade:
+			return "UIIcon.Filter_Blade";
+		case ItemFilterCategory2.Blunt:
+			return "UIIcon.Filter_Blunt";
+		case ItemFilterCategory2.OtherMelee:
+			return "UIIcon.Filter_OtherMelee";
+
+		case ItemFilterCategory2.Iconic:
+			return "UIIcon.Filter_Iconic";
+		case ItemFilterCategory2.CraftingPart:
+			return "UIIcon.Filter_CraftingPart";
+		case ItemFilterCategory2.CraftingRecipe:
+			return "UIIcon.Filter_CraftingRecipe";
+		case ItemFilterCategory2.Uncategorized:
+			return "UIIcon.Filter_Uncategorized";
 	}
 	// Check base categories
 	return wrappedMethod(filterType);
@@ -242,7 +358,7 @@ private final func Init() -> Void {
 	ArrayClear(this.m_additionalVendorFilters);
 	ArrayClear(this.m_additionalStorageFilters);
 
-	if moreWeaponFiltersConfig.enableVendorFilters {
+	if moreWeaponFiltersConfig.enableRangedVendorFilters {
 		ArrayPush(this.m_additionalPlayerFilters, ItemFilterCategory2.Handgun);
 		ArrayPush(this.m_additionalPlayerFilters, ItemFilterCategory2.Automatic);
 		ArrayPush(this.m_additionalPlayerFilters, ItemFilterCategory2.LongRange);
@@ -257,7 +373,50 @@ private final func Init() -> Void {
 		ArrayPush(this.m_additionalStorageFilters, ItemFilterCategory2.Automatic);
 		ArrayPush(this.m_additionalStorageFilters, ItemFilterCategory2.LongRange);
 		ArrayPush(this.m_additionalStorageFilters, ItemFilterCategory2.Shotgun);
+	}
 
+	if moreWeaponFiltersConfig.enableMeleeVendorFilters {
+		ArrayPush(this.m_additionalPlayerFilters, ItemFilterCategory2.Thrown);
+		ArrayPush(this.m_additionalPlayerFilters, ItemFilterCategory2.Blade);
+		ArrayPush(this.m_additionalPlayerFilters, ItemFilterCategory2.Blunt);
+
+		ArrayPush(this.m_additionalVendorFilters, ItemFilterCategory2.Thrown);
+		ArrayPush(this.m_additionalVendorFilters, ItemFilterCategory2.Blade);
+		ArrayPush(this.m_additionalVendorFilters, ItemFilterCategory2.Blunt);
+
+		ArrayPush(this.m_additionalStorageFilters, ItemFilterCategory2.Thrown);
+		ArrayPush(this.m_additionalStorageFilters, ItemFilterCategory2.Blade);
+		ArrayPush(this.m_additionalStorageFilters, ItemFilterCategory2.Blunt);
+	}
+
+	if moreWeaponFiltersConfig.enableItemVendorFilters {
+		ArrayPush(this.m_additionalPlayerFilters, ItemFilterCategory2.Iconic);
+
+		ArrayPush(this.m_additionalVendorFilters, ItemFilterCategory2.CraftingPart);
+		ArrayPush(this.m_additionalVendorFilters, ItemFilterCategory2.CraftingRecipe);
+
+		ArrayPush(this.m_additionalStorageFilters, ItemFilterCategory2.Iconic);
+	}
+
+	if moreWeaponFiltersConfig.enableRangedVendorFilters && moreWeaponFiltersConfig.enableMeleeVendorFilters {
+		if !this.modSortButtonWidthsSet {
+			this.modPlayerSortButtonWidth = inkWidgetRef.GetWidth(this.m_playerSortingButton) - 182.0;
+			this.modVendorSortButtonWidth = inkWidgetRef.GetWidth(this.m_vendorSortingButton) - 182.0;
+			this.modSortButtonWidthsSet = true;
+		}
+
+		// Set filter button grids to have 7 instead of 6 columns, since there's now a bunch more
+		// buttons. Also decrease the width of the sort buttons to accommodate the extra space.
+		let playerGridWidget = inkWidgetRef.Get(this.m_playerFiltersContainer) as inkUniformGrid;
+		playerGridWidget.wrappingWidgetCount = 8u;
+		inkWidgetRef.SetWidth(this.m_playerSortingButton, this.modPlayerSortButtonWidth);
+		
+		let vendorGridWidget = inkWidgetRef.Get(this.m_vendorFiltersContainer) as inkUniformGrid;
+		vendorGridWidget.wrappingWidgetCount = 8u;
+		inkWidgetRef.SetWidth(this.m_vendorSortingButton, this.modVendorSortButtonWidth);
+
+		inkWidgetRef.SetPadding(this.m_sortingDropdown, 230, 0, 0, 0);
+	} else if moreWeaponFiltersConfig.enableRangedVendorFilters || moreWeaponFiltersConfig.enableMeleeVendorFilters {
 		if !this.modSortButtonWidthsSet {
 			this.modPlayerSortButtonWidth = inkWidgetRef.GetWidth(this.m_playerSortingButton) - 81.0;
 			this.modVendorSortButtonWidth = inkWidgetRef.GetWidth(this.m_vendorSortingButton) - 81.0;
@@ -324,13 +483,23 @@ private final func SetFilters(root: inkWidgetRef, const data: script_ref<array<I
 
 @wrapMethod(InventoryItemModeLogicController)
 private final func SetupFiltersToCheck(equipmentArea: gamedataEquipmentArea) -> Void {
+	let moreWeaponFiltersConfig = MoreWeaponFiltersConfig.Get(GetGameInstance());
+
 	wrappedMethod(equipmentArea);
 	if Equals(equipmentArea, gamedataEquipmentArea.Weapon) {
-		this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Handgun)));
-		this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Automatic)));
-		this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.LongRange)));
-		this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Shotgun)));
-		this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.OtherRanged)));
+		if moreWeaponFiltersConfig.enableRangedEquipFilters {
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Handgun)));
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Automatic)));
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.LongRange)));
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Shotgun)));
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.OtherRanged)));
+		}
+		if moreWeaponFiltersConfig.enableMeleeEquipFilters {
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Thrown)));
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blade)));
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blunt)));
+			this.m_filterManager.AddFilterToCheck(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.OtherMelee)));
+		}
 	};
 }
 
@@ -360,6 +529,18 @@ public final static func IsOfCategoryType( filter : ItemFilterCategory, data : w
 				!data.HasTag(n"Shotgun") &&
 				!data.HasTag(n"Shotgun Dual") &&
 				!data.HasTag(n"ShotgunWeapon");
+
+		case ItemFilterCategory2.Thrown:
+			return data.HasTag(n"ThrowableWeapon");
+		case ItemFilterCategory2.Blade:
+			return data.HasTag(n"BladeWeapon");
+		case ItemFilterCategory2.Blunt:
+			return data.HasTag(n"BluntWeapon");
+		case ItemFilterCategory2.OtherMelee:
+			return data.HasTag(n"MeleeWeapon") &&
+				!data.HasTag(n"ThrowableWeapon") &&
+				!data.HasTag(n"BladeWeapon") &&
+				!data.HasTag(n"BluntWeapon");
 	}
 	return wrappedMethod(filter, data);
 }
@@ -420,6 +601,14 @@ private final func UpdateAvailableItems() -> Void {
 					targetFilter = this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.OtherRanged)));
 				} else if Equals(this.m_currentFilter, ItemFilterCategory.RangedWeapons) && this.GetFilterButtonIndex(ItemFilterCategory.RangedWeapons) >= 0 {
 					targetFilter = this.GetFilterButtonIndex(ItemFilterCategory.RangedWeapons);
+				} else if Equals(this.m_currentFilter, IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Thrown))) && this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Thrown))) >= 0 {
+					targetFilter = this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Thrown)));
+				} else if Equals(this.m_currentFilter, IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blade))) && this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blade))) >= 0 {
+					targetFilter = this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blade)));
+				} else if Equals(this.m_currentFilter, IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blunt))) && this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blunt))) >= 0 {
+					targetFilter = this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.Blunt)));
+				} else if Equals(this.m_currentFilter, IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.OtherMelee))) && this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.OtherMelee))) >= 0 {
+					targetFilter = this.GetFilterButtonIndex(IntEnum<ItemFilterCategory>(EnumInt(ItemFilterCategory2.OtherMelee)));
 				} else {
 					if Equals(this.m_currentFilter, ItemFilterCategory.MeleeWeapons) && this.GetFilterButtonIndex(ItemFilterCategory.MeleeWeapons) >= 0 {
 						targetFilter = this.GetFilterButtonIndex(ItemFilterCategory.MeleeWeapons);
@@ -438,4 +627,32 @@ private final func UpdateAvailableItems() -> Void {
 	} else {
 		this.m_itemGridDataView.Sort();
 	};
+}
+
+@addField(BackpackMainGameController)
+private let modSortButtonWidthSet: Bool = false;
+@addField(BackpackMainGameController)
+private let modSortButtonWidth: Float;
+
+// Shift sorting button/dropdown down in the backpack menu. There's too many
+// filters now, which would cause them to extend underneath the sorting button
+@wrapMethod(BackpackMainGameController)
+protected cb func OnInitialize() -> Bool {
+	let result = wrappedMethod();
+
+	let moreWeaponFiltersConfig = MoreWeaponFiltersConfig.Get(GetGameInstance());
+	if moreWeaponFiltersConfig.moveBackpackSortButtonDown {
+		// For some reason `SetTranslation` doesn't seem to do anything here, but a margin worked instead
+		inkWidgetRef.SetMargin(this.m_sortingButton, 0.0, 82.0, 0.0, 0.0);
+		inkWidgetRef.SetPadding(this.m_sortingDropdown, 0.0, 82.0, 0.0, 0.0);
+	} else {
+		if !this.modSortButtonWidthSet {
+			this.modSortButtonWidth = inkWidgetRef.GetWidth(this.m_sortingButton) * 0.8;
+			this.modSortButtonWidthSet = true;
+		}
+		inkWidgetRef.SetWidth(this.m_sortingButton, this.modSortButtonWidth);
+		inkWidgetRef.SetPadding(this.m_sortingDropdown, 85.5, 0.0, 0.0, 0.0);
+	}
+
+	return result;
 }

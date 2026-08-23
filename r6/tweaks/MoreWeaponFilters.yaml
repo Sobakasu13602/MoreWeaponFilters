@@ -37,3 +37,19 @@ UIIcon.Filter_Shotgun:
 UIIcon.Filter_OtherRanged:
     $base: UIIcon.Filter_AllItems
     atlasPartName: minor_activity
+
+UIIcon.Filter_Thrown:
+    $base: UIIcon.WeaponGroupUIIcon
+    atlasPartName: weapon_melee
+
+UIIcon.Filter_Blade:
+    $base: UIIcon.WeaponGroupUIIcon
+    atlasPartName: weapon_blades
+
+UIIcon.Filter_Blunt:
+    $base: UIIcon.WeaponGroupUIIcon
+    atlasPartName: weapon_blunt
+
+UIIcon.Filter_OtherMelee:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: minor_activity
