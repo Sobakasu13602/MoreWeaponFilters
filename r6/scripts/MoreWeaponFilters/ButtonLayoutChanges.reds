@@ -15,6 +15,11 @@ private let modDefaultSortDropdownPadding: inkMargin;
 @addField(InventoryItemModeLogicController)
 private let modSortButtonDefaultsSet: Bool = false;
 
+@addField(InventoryItemModeLogicController)
+private let modWeaponClassFilter: ItemFilterCategory2 = ItemFilterCategory2.WeaponClassAll;
+@addField(InventoryItemModeLogicController)
+private let modClassFilterButtons: [wref<BackpackFilterButtonController>];
+
 @wrapMethod(InventoryItemModeLogicController)
 protected cb func OnInitialize() -> Bool {
 	this.moreWeaponFiltersConfig = MoreWeaponFiltersConfig.Get(GetGameInstance());
@@ -80,6 +85,7 @@ private final func CreateFilterButtons(targetWidget: inkCompoundRef, opt equipme
 	if !ArrayContains(this.m_lastEquipmentAreas, equipmentArea) {
 		filters = this.m_filterManager.GetSortedFiltersList();
 		inkCompoundRef.RemoveAllChildren(this.m_filterButtonsGrid);
+		ArrayClear(this.modClassFilterButtons);
 		i = 0;
 
 		let isInline = Equals(this.moreWeaponFiltersConfig.extraFilterPosition, ExtraFilterButtonsPosition.Inline);
@@ -111,7 +117,158 @@ private final func CreateFilterButtons(targetWidget: inkCompoundRef, opt equipme
 			inkWidgetRef.SetVisible(this.m_nextFilterHint, i > 0);
 			i += 1;
 		};
+
+		if this.moreWeaponFiltersConfig.enableWeaponClassEquipFilters && this.IsEquipmentAreaWeapon(this.m_lastEquipmentAreas) {
+			this.ModSpawnWeaponClassFilterRow(inkWidgetRef.Get(targetWidget) as inkCompoundWidget);
+		};
 	};
+}
+
+// Spawn the weapon class sub-filters above the normal filters
+@addMethod(InventoryItemModeLogicController)
+private final func ModSpawnWeaponClassFilterRow(parent: ref<inkCompoundWidget>) -> Void {
+	let filterButton: ref<BackpackFilterButtonController>;
+	let classes: array<ItemFilterCategory2> = [
+		ItemFilterCategory2.WeaponClassAll,
+		ItemFilterCategory2.WeaponClassIconic,
+		ItemFilterCategory2.WeaponClassPower,
+		ItemFilterCategory2.WeaponClassTech,
+		ItemFilterCategory2.WeaponClassSmart
+	];
+	let i: Int32;
+
+
+	// Offsets for the buttons so they're moved to above the normal filters. The x offset
+	// is based on the number of normal buttons since these buttons are added to the same
+	// parent container as them. e.g. if you have normal buttons n, and class buttons c,
+	// it would look like this without offsets:
+	// | n | n | n | c | c |
+	// So to move them, in addition to a y offset, it needs to offset x for each `n`
+	// button by `width(button) * len(n_buttons)`, so that it looks like:
+	// | c | c |
+	// | n | n | n |
+	let primaryCount: Int32 = inkCompoundRef.GetNumChildren(this.m_filterButtonsGrid);
+	let xOffset: Float = -148.0 * Cast<Float>(primaryCount);
+	let yOffset: Float;
+
+	if Equals(this.moreWeaponFiltersConfig.extraFilterPosition, ExtraFilterButtonsPosition.Above) {
+		if this.moreWeaponFiltersConfig.moveFilterButtonsUp {
+			// Extra filters are already above and the buttons are moved up, so only empty space is below main filters
+			yOffset = 104.0;
+		} else {
+			// Extra filters are above, but there's still room above that, so move the class filters up two rows
+			yOffset = -104.0 - 87.0;
+		}
+	} else {
+		// Extra filters are inline/below, and it doesn't matter if the filters are moved up since that offset also
+		// applies to these buttons
+		yOffset = -104.0;
+	}
+
+	i = 0;
+	while i < ArraySize(classes) {
+		filterButton = this.SpawnFromLocal(parent, n"filterButtonItem").GetController() as BackpackFilterButtonController;
+		filterButton.RegisterToCallback(n"OnRelease", this, n"ModOnWeaponClassFilterClick");
+		filterButton.RegisterToCallback(n"OnHoverOver", this, n"OnItemFilterHoverOver");
+		filterButton.RegisterToCallback(n"OnHoverOut", this, n"OnItemFilterHoverOut");
+		filterButton.Setup(IntEnum<ItemFilterCategory>(EnumInt(classes[i])));
+
+		filterButton.GetRootWidget().SetTranslation(new Vector2(xOffset, yOffset));
+
+		ArrayPush(this.modClassFilterButtons, filterButton);
+		i += 1;
+	};
+
+	this.ModSetActiveClassFilter(this.modWeaponClassFilter);
+	this.ModUpdateWeaponClassFilterVisibility(this.m_savedFilter);
+}
+
+// Equivalent of `OnItemFilterClick` that sets the active class filter instead
+@addMethod(InventoryItemModeLogicController)
+protected cb func ModOnWeaponClassFilterClick(evt: ref<inkPointerEvent>) -> Bool {
+	let controller: ref<BackpackFilterButtonController>;
+	let widget: ref<inkWidget>;
+	if evt.IsAction(n"click") {
+		widget = evt.GetCurrentTarget();
+		controller = widget.GetController() as BackpackFilterButtonController;
+		this.ModSetActiveClassFilter(IntEnum<ItemFilterCategory2>(EnumInt(controller.GetFilterType())));
+		this.PlayLibraryAnimation(n"inventory_grid_filter_change");
+		this.PlaySound(n"Button", n"OnPress");
+	};
+}
+
+// Selects a weapon class filter. Updates the active button, the stored class
+// filter, and the grid view
+@addMethod(InventoryItemModeLogicController)
+private final func ModSetActiveClassFilter(classFilter: ItemFilterCategory2) -> Void {
+	let i: Int32 = 0;
+	while i < ArraySize(this.modClassFilterButtons) {
+		let button: wref<BackpackFilterButtonController> = this.modClassFilterButtons[i];
+		if IsDefined(button) {
+			let match: Bool = Equals(IntEnum<ItemFilterCategory2>(EnumInt(button.GetFilterType())), classFilter);
+			button.SetActive(match);
+		};
+		i += 1;
+	};
+	this.modWeaponClassFilter = classFilter;
+	this.m_itemGridDataView.ModSetWeaponClassFilter(IntEnum<ItemFilterCategory>(EnumInt(classFilter)));
+}
+
+// Whether the given filter is a melee category
+@addMethod(InventoryItemModeLogicController)
+private final func ModIsMeleeFilter(filter: ItemFilterCategory) -> Bool {
+	switch filter {
+		case ItemFilterCategory2.MeleeWeapons:
+		case ItemFilterCategory2.Thrown:
+		case ItemFilterCategory2.Blade:
+		case ItemFilterCategory2.Blunt:
+		case ItemFilterCategory2.OtherMelee:
+			return true;
+	};
+	return false;
+}
+
+// Whether a given sub-filter is only for ranged weapons
+@addMethod(InventoryItemModeLogicController)
+private final func ModIsRangedOnlyFilter(filter: ItemFilterCategory) -> Bool {
+	switch filter {
+		case ItemFilterCategory2.WeaponClassPower:
+		case ItemFilterCategory2.WeaponClassTech:
+		case ItemFilterCategory2.WeaponClassSmart:
+			return true;
+	};
+	return false;
+}
+
+// Hide power/tech/smart sub-filters when melee filters are selected. Hide all
+// sub-filters when mods are selected
+@addMethod(InventoryItemModeLogicController)
+private final func ModUpdateWeaponClassFilterVisibility(currentFilter: ItemFilterCategory) -> Void {
+	if ArraySize(this.modClassFilterButtons) == 0 {
+		return;
+	};
+	let hideAll: Bool = Equals(currentFilter, ItemFilterCategory.Attachments);
+	let hideGunOnly: Bool = this.ModIsMeleeFilter(currentFilter);
+	if hideAll || (hideGunOnly && this.ModIsRangedOnlyFilter(IntEnum<ItemFilterCategory>(EnumInt(this.modWeaponClassFilter)))) {
+		this.ModSetActiveClassFilter(ItemFilterCategory2.WeaponClassAll);
+	};
+	let i: Int32 = 0;
+	while i < ArraySize(this.modClassFilterButtons) {
+		let button: wref<BackpackFilterButtonController> = this.modClassFilterButtons[i];
+		if IsDefined(button) {
+			let visible: Bool = !hideAll && (!hideGunOnly || !this.ModIsRangedOnlyFilter(button.GetFilterType()));
+			button.GetRootWidget().SetVisible(visible);
+		};
+		i += 1;
+	};
+}
+
+// Update the sub-filter visibility whenever the normal filters change, so Power/Tech/Smart will
+// be hidden for melee weapons
+@wrapMethod(InventoryItemModeLogicController)
+private final func SetActiveFilterController(controller: ref<BackpackFilterButtonController>) -> Void {
+	wrappedMethod(controller);
+	this.ModUpdateWeaponClassFilterVisibility(controller.GetFilterType());
 }
 
 // keep selected filter on equip/unequip
@@ -152,12 +309,13 @@ protected cb func OnItemChooserUnequipItem(evt: ref<ItemChooserUnequipItem>) -> 
 	return result;
 }
 
-// Increase scale of melee filter icons
-
+// Increase scale of melee icons and decrease calse of weapon class icons
 @wrapMethod(BackpackFilterButtonController)
 public final func Setup(filterType: ItemFilterCategory) -> Void {
 	if EnumInt(filterType) >= EnumInt(ItemFilterCategory2.Thrown) && EnumInt(filterType) <= EnumInt(ItemFilterCategory2.Blunt) {
 		inkWidgetRef.SetScale(this.m_icon, new Vector2(2.3, 2.3));
+	} else if EnumInt(filterType) >= EnumInt(ItemFilterCategory2.WeaponClassPower) && EnumInt(filterType) <= EnumInt(ItemFilterCategory2.WeaponClassSmart) {
+		inkWidgetRef.SetScale(this.m_icon, new Vector2(0.8, 0.8));
 	} else {
 		inkWidgetRef.SetScale(this.m_icon, new Vector2(1, 1));
 	}

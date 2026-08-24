@@ -53,3 +53,19 @@ UIIcon.Filter_Blunt:
 UIIcon.Filter_OtherMelee:
     $base: UIIcon.Filter_AllItems
     atlasPartName: minor_activity
+
+UIIcon.Filter_WeaponClassAll:
+    $base: UIIcon.Filter_AllItems
+    atlasPartName: resource
+
+UIIcon.Filter_WeaponClassPower:
+    $base: UIIcon.WeaponGroupUIIcon
+    atlasPartName: ico_power
+
+UIIcon.Filter_WeaponClassTech:
+    $base: UIIcon.WeaponGroupUIIcon
+    atlasPartName: ico_tech-1
+
+UIIcon.Filter_WeaponClassSmart:
+    $base: UIIcon.WeaponGroupUIIcon
+    atlasPartName: ico_smart

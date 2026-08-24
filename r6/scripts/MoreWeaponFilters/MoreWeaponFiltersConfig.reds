@@ -18,8 +18,8 @@ class MoreWeaponFiltersConfig extends ScriptableSystem {
 	@runtimeProperty("ModSettings.category", "Button Positions")
 	@runtimeProperty("ModSettings.category.order", "1")
 	@runtimeProperty("ModSettings.displayName", "Move Backpack Sorting Button Down")
-	@runtimeProperty("ModSettings.description", "Move sorting button down a row in the backpack screen. When disabled, decreases the dropdown button width a bit to avoid overlapping. Note: this should be disabled if using the backpack search mod.")
-	public let moveBackpackSortButtonDown: Bool = false;
+	@runtimeProperty("ModSettings.description", "Move sorting button down a row in the backpack screen. When disabled, decreases the dropdown button width a bit to avoid overlapping. Note: this was previously incompatible with the backpack search mod, but now works without conflict.")
+	public let moveBackpackSortButtonDown: Bool = true;
 
 	@runtimeProperty("ModSettings.mod", "More Weapon Filters")
 	@runtimeProperty("ModSettings.category", "Button Positions")
@@ -90,11 +90,20 @@ class MoreWeaponFiltersConfig extends ScriptableSystem {
 	@runtimeProperty("ModSettings.displayName", "Stash and vendor menus: Add item filters")
 	public let enableItemVendorFilters: Bool = false;
 
+	// Weapon Class Toggles
+
+	@runtimeProperty("ModSettings.mod", "More Weapon Filters")
+	@runtimeProperty("ModSettings.category", "Weapon Class Toggles")
+	@runtimeProperty("ModSettings.category.order", "5")
+	@runtimeProperty("ModSettings.displayName", "Weapon Equip Menu: Add weapon class filters")
+	@runtimeProperty("ModSettings.description", "Add a second row of filters (Iconic/Power/Tech/Smart) to the weapon equip menu. These combine with the normal filters (e.g. Handguns + Power = Power handguns).")
+	public let enableWeaponClassEquipFilters: Bool = true;
+
 	// Misc
 
 	@runtimeProperty("ModSettings.mod", "More Weapon Filters")
 	@runtimeProperty("ModSettings.category", "Misc")
-	@runtimeProperty("ModSettings.category.order", "5")
+	@runtimeProperty("ModSettings.category.order", "6")
 	@runtimeProperty("ModSettings.displayName", "Keep Selected Filter on Equip/Unequip")
 	@runtimeProperty("ModSettings.description", "When you equip or unequip a weapon, keep the currently selected filter instead of changing to the generic ranged/melee weapon filter.")
 	public let keepFilterSelectOnEquip: Bool = true;

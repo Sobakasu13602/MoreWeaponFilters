@@ -34,6 +34,14 @@ enum ItemFilterCategory2 {
 	CraftingRecipe = 31,	// Crafting and quickhack recepies (These don't actually appear in your backpack)
 	Uncategorized = 32,		// Anything else
 	AllCount = 33,
+
+	// These are separate filters that AND with the normal filters (e.g. Handgun + Power)
+	WeaponClassAll = 40,
+	WeaponClassIconic = 41,
+	WeaponClassPower = 42,
+	WeaponClassTech = 43,
+	WeaponClassSmart = 44,
+	WeaponClassCount = 45,
 }
 
 // Refactor PopulateInventory, change local tagsToFilterOut variable into m_tagsToFilterOut field.
@@ -43,6 +51,13 @@ private let m_tagsToFilterOut: array<CName>;
 // Additional filters are controlled by the m_additionalFilters field.
 @addField(BackpackMainGameController)
 private let m_additionalFilters: array<ItemFilterCategory2>;
+
+@addField(BackpackMainGameController)
+private let modSortButtonWidthSet: Bool = false;
+@addField(BackpackMainGameController)
+private let modSortButtonWidth: Float;
+@addField(BackpackMainGameController)
+private let modSortButtonReparented: Bool = false;
 
 // Set inventory blacklist (quickhacks are no longer on it), and additional filters
 @wrapMethod(BackpackMainGameController)
@@ -69,8 +84,54 @@ protected cb func OnInitialize() -> Bool {
 		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Quest);
 		ArrayPush(this.m_additionalFilters, ItemFilterCategory2.Uncategorized);
 	}
-	return wrappedMethod();
+
+	let result = wrappedMethod();
+
+	// Shift sorting button/dropdown down in the backpack menu. There's too many
+	// filters now, which would cause them to extend underneath the sorting button
+	let moreWeaponFiltersConfig = MoreWeaponFiltersConfig.Get(GetGameInstance());
+	if moreWeaponFiltersConfig.moveBackpackSortButtonDown {
+		let root = this.GetRootCompoundWidget();
+		let container = root.GetWidgetByPathName(n"wrapper/inkCanvasWidget21/inkVerticalPanelWidget25") as inkCompoundWidget;
+		if !this.modSortButtonReparented {
+			// Move the dropdown button into its parent. By default it's inside the same
+			// horizontal widget as the filter buttons, which prevented SetTranslation
+			// from working when I tried that in the past
+			inkWidgetRef.Reparent(this.m_sortingButton, container);
+			this.modSortButtonReparented = true;
+		}
+		inkWidgetRef.SetPadding(this.m_sortingDropdown, 0.0, 82.0, 0.0, 0.0);
+	} else {
+		if !this.modSortButtonWidthSet {
+			this.modSortButtonWidth = inkWidgetRef.GetWidth(this.m_sortingButton) * 0.8;
+			this.modSortButtonWidthSet = true;
+		}
+		inkWidgetRef.SetWidth(this.m_sortingButton, this.modSortButtonWidth);
+		inkWidgetRef.SetPadding(this.m_sortingDropdown, 85.5, 0.0, 0.0, 0.0);
+	}
+
+	return result;
 }
+
+// Backpack Search compatibility: only add the extra margin if it's not present.
+// Otherwise the margin added by this will push the dropdown even further down since
+// that also has an 8.0 top margin. This is in `OnPlayerAttach` instead of
+// `OnInitialize` since that's where Backpack Search creates the `searchContainer`.
+// Doing the check in `OnInitialize` would probably run into issues depending on which
+// wrapper runs first.
+@wrapMethod(BackpackMainGameController)
+protected cb func OnPlayerAttach(playerPuppet: ref<GameObject>) -> Bool {
+	let result = wrappedMethod(playerPuppet);
+
+	let root = this.GetRootCompoundWidget();
+	let container = root.GetWidgetByPathName(n"wrapper/inkCanvasWidget21/inkVerticalPanelWidget25") as inkCompoundWidget;
+
+	if !IsDefined(container.GetWidgetByPathName(n"searchContainer")) {
+		inkWidgetRef.SetMargin(this.m_sortingButton, 0.0, 8.0, 0.0, 0.0);
+	}
+	return result;
+}
+
 
 // Refactor PopulateInventory, use m_tagsToFilterOut and m_additionalFilters to manage filtering
 @replaceMethod(BackpackMainGameController)
@@ -250,6 +311,17 @@ public final static func FilterItem(filter: ItemFilterCategory, wrappedData: ref
 					&& !wrappedData.Item.IsQuestItem()
 					&& !wrappedData.Item.HasTag(n"CraftingPart")
 					&& !wrappedData.Item.IsRecipe();
+
+			case ItemFilterCategory2.WeaponClassAll:
+				return true;
+			case ItemFilterCategory2.WeaponClassIconic:
+				return wrappedData.Item.HasTag(n"IconicWeapon");
+			case ItemFilterCategory2.WeaponClassPower:
+				return wrappedData.Item.HasTag(n"PowerWeapon");
+			case ItemFilterCategory2.WeaponClassTech:
+				return wrappedData.Item.HasTag(n"TechWeapon");
+			case ItemFilterCategory2.WeaponClassSmart:
+				return wrappedData.Item.HasTag(n"SmartWeapon");
 		}
 	}
 	// Basic filter categories
@@ -278,6 +350,8 @@ public final static func GetLabelKey(filterType: ItemFilterCategory) -> CName {
 			return n"Blade";
 		case ItemFilterCategory2.Blunt:
 			return n"Blunt";
+		case ItemFilterCategory2.OtherMelee:
+			return n"Other Melee";
 
 		case ItemFilterCategory2.Iconic:
 			return n"Iconic Items";
@@ -287,6 +361,17 @@ public final static func GetLabelKey(filterType: ItemFilterCategory) -> CName {
 			return n"Crafting Specs";
 		case ItemFilterCategory2.Uncategorized:
 			return n"Others";
+
+		case ItemFilterCategory2.WeaponClassAll:
+			return n"All";
+		case ItemFilterCategory2.WeaponClassIconic:
+			return n"Iconic";
+		case ItemFilterCategory2.WeaponClassPower:
+			return n"Power";
+		case ItemFilterCategory2.WeaponClassTech:
+			return n"Tech";
+		case ItemFilterCategory2.WeaponClassSmart:
+			return n"Smart";
 	}
 	// Check base categories
 	return wrappedMethod(filterType);
@@ -325,6 +410,17 @@ public final static func GetIcon(filterType: ItemFilterCategory) -> String {
 			return "UIIcon.Filter_CraftingRecipe";
 		case ItemFilterCategory2.Uncategorized:
 			return "UIIcon.Filter_Uncategorized";
+
+		case ItemFilterCategory2.WeaponClassAll:
+			return "UIIcon.Filter_WeaponClassAll";
+		case ItemFilterCategory2.WeaponClassIconic:
+			return "UIIcon.Filter_Iconic";
+		case ItemFilterCategory2.WeaponClassPower:
+			return "UIIcon.Filter_WeaponClassPower";
+		case ItemFilterCategory2.WeaponClassTech:
+			return "UIIcon.Filter_WeaponClassTech";
+		case ItemFilterCategory2.WeaponClassSmart:
+			return "UIIcon.Filter_WeaponClassSmart";
 	}
 	// Check base categories
 	return wrappedMethod(filterType);
@@ -541,6 +637,17 @@ public final static func IsOfCategoryType( filter : ItemFilterCategory, data : w
 				!data.HasTag(n"ThrowableWeapon") &&
 				!data.HasTag(n"BladeWeapon") &&
 				!data.HasTag(n"BluntWeapon");
+
+		case ItemFilterCategory2.WeaponClassAll:
+			return true;
+		case ItemFilterCategory2.WeaponClassIconic:
+			return data.HasTag(n"IconicWeapon");
+		case ItemFilterCategory2.WeaponClassPower:
+			return data.HasTag(n"PowerWeapon");
+		case ItemFilterCategory2.WeaponClassTech:
+			return data.HasTag(n"TechWeapon");
+		case ItemFilterCategory2.WeaponClassSmart:
+			return data.HasTag(n"SmartWeapon");
 	}
 	return wrappedMethod(filter, data);
 }
@@ -629,30 +736,25 @@ private final func UpdateAvailableItems() -> Void {
 	};
 }
 
-@addField(BackpackMainGameController)
-private let modSortButtonWidthSet: Bool = false;
-@addField(BackpackMainGameController)
-private let modSortButtonWidth: Float;
+// ========= Weapon class filters =========
 
-// Shift sorting button/dropdown down in the backpack menu. There's too many
-// filters now, which would cause them to extend underneath the sorting button
-@wrapMethod(BackpackMainGameController)
-protected cb func OnInitialize() -> Bool {
-	let result = wrappedMethod();
+@addField(ItemModeGridView)
+public let modWeaponClassFilter: ItemFilterCategory = ItemFilterCategory.AllItems;
 
-	let moreWeaponFiltersConfig = MoreWeaponFiltersConfig.Get(GetGameInstance());
-	if moreWeaponFiltersConfig.moveBackpackSortButtonDown {
-		// For some reason `SetTranslation` doesn't seem to do anything here, but a margin worked instead
-		inkWidgetRef.SetMargin(this.m_sortingButton, 0.0, 82.0, 0.0, 0.0);
-		inkWidgetRef.SetPadding(this.m_sortingDropdown, 0.0, 82.0, 0.0, 0.0);
-	} else {
-		if !this.modSortButtonWidthSet {
-			this.modSortButtonWidth = inkWidgetRef.GetWidth(this.m_sortingButton) * 0.8;
-			this.modSortButtonWidthSet = true;
-		}
-		inkWidgetRef.SetWidth(this.m_sortingButton, this.modSortButtonWidth);
-		inkWidgetRef.SetPadding(this.m_sortingDropdown, 85.5, 0.0, 0.0, 0.0);
-	}
+@addMethod(ItemModeGridView)
+public final func ModSetWeaponClassFilter(filter: ItemFilterCategory) -> Void {
+	this.modWeaponClassFilter = filter;
+	this.Filter();
+}
 
-	return result;
+// AND the normal filter with the weapon class filter when filtering items
+@replaceMethod(ItemModeGridView)
+public func FilterItem(data: ref<IScriptable>) -> Bool {
+	let m_wrappedData: ref<WrappedInventoryItemData> = data as WrappedInventoryItemData;
+	let classFilter: ItemFilterCategory = this.modWeaponClassFilter;
+	if Equals(classFilter, ItemFilterCategory.AllItems) || Equals(classFilter, ItemFilterCategory.Invalid) {
+		return ItemCategoryFliter.FilterItem(this.m_itemFilterType, m_wrappedData);
+	};
+	return ItemCategoryFliter.FilterItem(this.m_itemFilterType, m_wrappedData)
+		&& ItemCategoryFliter.FilterItem(classFilter, m_wrappedData);
 }
