@@ -653,7 +653,7 @@ public final static func IsOfCategoryType( filter : ItemFilterCategory, data : w
 }
 
 @wrapMethod(InventoryItemModeLogicController)
-private final func UpdateAvailableItems() -> Void {
+private final func UpdateAvailableItems(opt keepCurrentFilter: Bool) -> Void {
 	let attachments: array<ref<InventoryItemAttachments>>;
 	let attachmentsToCheck: array<TweakDBID>;
 	let availableItems: array<InventoryItemData>;
@@ -664,10 +664,14 @@ private final func UpdateAvailableItems() -> Void {
 	let isOutfit: Bool = ArrayContains(this.m_lastEquipmentAreas, gamedataEquipmentArea.Outfit);
 	this.m_itemGridContainerController.SetSize(isOutfit ? ItemModeGridSize.Outfit : ItemModeGridSize.Default);
 	if isWeapon || isClothing {
-		this.m_InventoryManager.GetPlayerInventoryDataRef(this.m_lastEquipmentAreas, true, this.m_itemDropQueue, availableItems);
-		attachments = InventoryItemData.GetAttachments(this.itemChooser.GetModifiedItemData());
-		if TDBID.IsValid(this.itemChooser.GetSelectedSlotID()) {
-			ArrayPush(attachmentsToCheck, this.itemChooser.GetSelectedSlotID());
+		if isWeapon && this.m_leftHandWeaponOnly {
+			this.m_InventoryManager.GetPlayerDualWieldInventoryDataRef(true, this.m_itemDropQueue, availableItems);
+		} else {
+			this.m_InventoryManager.GetPlayerInventoryDataRef(this.m_lastEquipmentAreas, true, this.m_itemDropQueue, availableItems);
+		};
+		attachments = InventoryItemData.GetAttachments(this.m_selectedItemChooser.GetModifiedItemData());
+		if TDBID.IsValid(this.m_selectedItemChooser.GetSelectedSlotID()) {
+			ArrayPush(attachmentsToCheck, this.m_selectedItemChooser.GetSelectedSlotID());
 		} else {
 			i = 0;
 			while i < ArraySize(attachments) {
@@ -677,7 +681,7 @@ private final func UpdateAvailableItems() -> Void {
 				i += 1;
 			};
 		};
-		this.m_InventoryManager.GetPlayerInventoryPartsForItemRef(this.itemChooser.GetModifiedItemID(), attachmentsToCheck, availableItems);
+		this.m_InventoryManager.GetPlayerInventoryPartsForItemRef(this.m_selectedItemChooser.GetModifiedItemID(), attachmentsToCheck, this.m_itemDropQueue, availableItems);
 	} else {
 		if Equals(this.m_viewMode, ItemViewModes.Mod) {
 			availableItems = this.m_InventoryManager.GetPlayerInventoryPartsForItem((this.itemChooser as InventoryCyberwareItemChooser).GetModifiedItemID(), this.itemChooser.GetSelectedItem().GetSlotID());
@@ -689,8 +693,7 @@ private final func UpdateAvailableItems() -> Void {
 	this.UpdateAvailableItemsGrid(availableItems);
 	this.CreateFilterButtons(this.m_itemGridContainerController.GetFiltersGrid());
 	this.m_itemGridDataView.EnableSorting();
-	if isWeapon || isClothing {
-		this.m_lastSelectedDisplay = this.itemChooser.GetSelectedItem();
+	if (isWeapon || isClothing) && !keepCurrentFilter {
 		if Equals(this.m_viewMode, ItemViewModes.Mod) && this.GetFilterButtonIndex(ItemFilterCategory.Attachments) >= 0 {
 			this.SelectFilterButton(ItemFilterCategory.Attachments);
 		} else {
